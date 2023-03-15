@@ -81,6 +81,7 @@ func RegisterFunc(fptr interface{}, cfn uintptr) {
 	if cfn == 0 {
 		panic("purego: cfn is nil")
 	}
+	var numRefs int
 	{
 		// this code checks how many registers and stack this function will use
 		// to avoid crashing with too many arguments
@@ -106,6 +107,10 @@ func RegisterFunc(fptr interface{}, cfn uintptr) {
 				}
 			default:
 				panic("purego: unsupported kind " + arg.Kind().String())
+			}
+			switch arg.Kind() {
+			case reflect.String, reflect.Ptr, reflect.UnsafePointer, reflect.Slice:
+				numRefs++
 			}
 		}
 		if ints+stack > maxArgs || floats+stack > maxArgs {
@@ -143,23 +148,28 @@ func RegisterFunc(fptr interface{}, cfn uintptr) {
 				numInts++
 			}
 		}
-		var keepAlive []interface{}
-		defer func() {
-			runtime.KeepAlive(keepAlive)
-		}()
+		var keepAlive []unsafe.Pointer
+		if numRefs != 0 {
+			var keepAliveBuf [maxArgs]unsafe.Pointer
+			keepAlive = keepAliveBuf[:0:numRefs]
+			defer func() {
+				runtime.KeepAlive(keepAlive)
+			}()
+		}
 		for _, v := range args {
 			switch v.Kind() {
 			case reflect.String:
 				ptr := strings.CString(v.String())
-				keepAlive = append(keepAlive, ptr)
+				keepAlive = append(keepAlive, unsafe.Pointer(ptr))
 				addInt(uintptr(unsafe.Pointer(ptr)))
 			case reflect.Uintptr, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				addInt(uintptr(v.Uint()))
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				addInt(uintptr(v.Int()))
 			case reflect.Ptr, reflect.UnsafePointer, reflect.Slice:
-				keepAlive = append(keepAlive, v.Pointer())
-				addInt(v.Pointer())
+				uptr := v.UnsafePointer()
+				keepAlive = append(keepAlive, uptr)
+				addInt(uintptr(uptr))
 			case reflect.Func:
 				addInt(NewCallback(v.Interface()))
 			case reflect.Bool:
@@ -185,7 +195,30 @@ func RegisterFunc(fptr interface{}, cfn uintptr) {
 			sysargs[0], sysargs[1], sysargs[2], sysargs[3], sysargs[4], sysargs[5], sysargs[6], sysargs[7], sysargs[8],
 			floats[0], floats[1], floats[2], floats[3], floats[4], floats[5], floats[6], floats[7],
 			0, 0, 0}
-		runtime_cgocall(syscall9XABI0, unsafe.Pointer(&syscall))
+		runtime_cgocall(syscall9XABI0, uintptr(unsafe.Pointer(&syscall)))
+		if cgo_always_false {
+			cgo_use(syscall.fn)
+			cgo_use(syscall.a1)
+			cgo_use(syscall.a2)
+			cgo_use(syscall.a3)
+			cgo_use(syscall.a4)
+			cgo_use(syscall.a5)
+			cgo_use(syscall.a6)
+			cgo_use(syscall.a7)
+			cgo_use(syscall.a8)
+			cgo_use(syscall.a9)
+			cgo_use(syscall.f1)
+			cgo_use(syscall.f2)
+			cgo_use(syscall.f3)
+			cgo_use(syscall.f4)
+			cgo_use(syscall.f5)
+			cgo_use(syscall.f6)
+			cgo_use(syscall.f7)
+			cgo_use(syscall.f8)
+			cgo_use(syscall.r1)
+			cgo_use(syscall.r2)
+			cgo_use(syscall.err)
+		}
 		r1, r2 := syscall.r1, syscall.r2
 
 		if ty.NumOut() == 0 {
@@ -200,11 +233,9 @@ func RegisterFunc(fptr interface{}, cfn uintptr) {
 			v.SetInt(int64(r1))
 		case reflect.Bool:
 			v.SetBool(r1 != 0)
-		case reflect.UnsafePointer:
+		case reflect.UnsafePointer, reflect.Ptr:
 			// We take the address and then dereference it to trick go vet from creating a possible miss-use of unsafe.Pointer
 			v.SetPointer(*(*unsafe.Pointer)(unsafe.Pointer(&r1)))
-		case reflect.Ptr:
-			v = reflect.NewAt(outType, unsafe.Pointer(&r1)).Elem()
 		case reflect.Func:
 			// wrap this C function in a nicely typed Go function
 			v = reflect.New(outType)
@@ -233,3 +264,9 @@ func numOfIntegerRegisters() int {
 		panic("purego: unknown GOARCH (" + runtime.GOARCH + ")")
 	}
 }
+
+//go:linkname cgo_always_false runtime.cgoAlwaysFalse
+var cgo_always_false bool
+
+//go:linkname cgo_use runtime.cgoUse
+func cgo_use(interface{})

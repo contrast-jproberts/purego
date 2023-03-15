@@ -28,7 +28,30 @@ func syscall_syscall9X(fn, a1, a2, a3, a4, a5, a6, a7, a8, a9 uintptr) (r1, r2, 
 		math.Float64frombits(uint64(a4)), math.Float64frombits(uint64(a5)), math.Float64frombits(uint64(a6)),
 		math.Float64frombits(uint64(a7)), math.Float64frombits(uint64(a8)),
 		r1, r2, err}
-	runtime_cgocall(syscall9XABI0, unsafe.Pointer(&args))
+	runtime_cgocall(syscall9XABI0, uintptr(unsafe.Pointer(&args)))
+	if cgo_always_false {
+		cgo_use(args.fn)
+		cgo_use(args.a1)
+		cgo_use(args.a2)
+		cgo_use(args.a3)
+		cgo_use(args.a4)
+		cgo_use(args.a5)
+		cgo_use(args.a6)
+		cgo_use(args.a7)
+		cgo_use(args.a8)
+		cgo_use(args.a9)
+		cgo_use(args.f1)
+		cgo_use(args.f2)
+		cgo_use(args.f3)
+		cgo_use(args.f4)
+		cgo_use(args.f5)
+		cgo_use(args.f6)
+		cgo_use(args.f7)
+		cgo_use(args.f8)
+		cgo_use(args.r1)
+		cgo_use(args.r2)
+		cgo_use(args.err)
+	}
 	return args.r1, args.r2, args.err
 }
 
